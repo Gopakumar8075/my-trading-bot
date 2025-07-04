@@ -11,7 +11,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", "test1234")
 
 # Connect to Delta
 try:
-    delta = DeltaRestClient(key=API_KEY, secret=API_SECRET)
+   delta = DeltaRestClient(access_key=API_KEY, access_secret=API_SECRET)
     print("Delta client initialized.")
 except Exception as e:
     print("Error initializing Delta client:", e)
