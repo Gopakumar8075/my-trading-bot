@@ -17,8 +17,12 @@ print("🔍 DEBUG - SECRET_KEY:", repr(SECRET_KEY))
 
 # --- Safety check ---
 if not API_KEY or not API_SECRET:
-    print("❌ API_KEY or API_SECRET is missing. Set them in environment variables.")
+    print("❌ API_KEY or API_SECRET is missing. Render sees:", {
+        "API_KEY": repr(API_KEY),
+        "API_SECRET": repr(API_SECRET),
+    })
     exit(1)
+
 
 # --- Connect to Delta Exchange ---
 try:
