@@ -11,7 +11,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", "default-secret-if-not-set")
 
 # Exchange Connection
 try:
-    exchange = ccxt.binance({
+   exchange = ccxt.delta({
         'apiKey': os.getenv('API_KEY'),
         'secret': os.getenv('API_SECRET'),
         'options': {
