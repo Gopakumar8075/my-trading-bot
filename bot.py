@@ -1,31 +1,31 @@
 from flask import Flask, request, jsonify
-import ccxt
+from delta_rest_client import DeltaRestClient
 import os
 
 app = Flask(__name__)
 
-# Debug log to verify environment variables
-print("DEBUG - API_KEY:", os.getenv("API_KEY"))
-print("DEBUG - API_SECRET:", os.getenv("API_SECRET"))
-print("DEBUG - SECRET_KEY:", os.getenv("SECRET_KEY"))
-
+# Load env variables
 API_KEY = os.getenv("API_KEY")
 API_SECRET = os.getenv("API_SECRET")
-SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY", "test1234")
 
-if not API_KEY or not API_SECRET:
-    raise ValueError("API_KEY or API_SECRET is missing from environment variables.")
+# Connect to Delta
+try:
+    delta = DeltaRestClient(key=API_KEY, secret=API_SECRET)
+    print("Delta client initialized.")
+except Exception as e:
+    print("Error initializing Delta client:", e)
+    delta = None
 
-exchange = ccxt.delta({
-    'apiKey': API_KEY,
-    'secret': API_SECRET,
-    'options': {'defaultType': 'future'},
-    'enableRateLimit': True
-})
+# Map symbol to product_id (must match Delta Exchange)
+product_map = {
+    "ETH-USD": 3136,  # You can add more symbols here
+    "BTC-USD": 1
+}
 
 @app.route('/')
-def home():
-    return "Bot is running."
+def health():
+    return "Delta Bot Running."
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -33,56 +33,67 @@ def webhook():
         data = request.get_json(force=True)
         print("Webhook received:", data)
     except Exception as e:
-        print("Error parsing JSON:", e)
-        return jsonify({"status": "error", "message": "Invalid JSON"}), 400
+        return jsonify({"error": "Invalid JSON", "detail": str(e)}), 400
 
     if data.get("secret") != SECRET_KEY:
-        print("Invalid secret key.")
-        return jsonify({"status": "error", "message": "Invalid secret key"}), 403
+        return jsonify({"error": "Unauthorized"}), 403
 
     symbol = data.get("symbol")
+    product_id = product_map.get(symbol)
     side = data.get("side")
     action = data.get("action")
-    qty_pct = float(data.get("qty_pct", 100))
+    qty_pct = float(data.get("qty_pct", 0))
+
+    if not product_id:
+        return jsonify({"error": f"Symbol '{symbol}' not found in product map"}), 400
+
+    if not delta:
+        return jsonify({"error": "Delta client not initialized"}), 500
 
     try:
-        markets = exchange.load_markets()
-        if symbol not in markets:
-            print(f"Symbol {symbol} not found in market list.")
-            return jsonify({"status": "error", "message": "Invalid symbol"}), 400
+        account = delta.get_account()
+        usdt_balance = float(account["result"]["balances"]["USDT"]["available_balance"])
+        amount_to_use = usdt_balance * (qty_pct / 100)
+
+        # Get current price
+        ticker = delta.get_l2_snapshot(product_id=product_id)
+        price = float(ticker["result"]["best_ask_price"])
+        size = round(amount_to_use / price, 4)
 
         if side == "buy":
-            balance = exchange.fetch_balance()
-            quote_currency = "USDT"
-            available = balance["free"].get(quote_currency, 0)
-            print(f"Available balance: {available:.2f} {quote_currency}")
-            ticker = exchange.fetch_ticker(symbol)
-            price = ticker["last"]
-            quantity = available * (qty_pct / 100) / price
-            print(f"Buying {quantity:.5f} of {symbol} at {price}")
-            order = exchange.create_market_buy_order(symbol, quantity)
+            print(f"Placing MARKET BUY on {symbol} ({product_id}) for size {size}")
+            order = delta.create_order(
+                product_id=product_id,
+                size=size,
+                side="buy",
+                order_type="market",
+                post_only=False
+            )
             return jsonify({"status": "success", "order": order}), 200
 
         elif action == "close":
-            positions = exchange.fetch_positions([symbol])
-            open_position = next((p for p in positions if p["symbol"] == symbol and float(p.get("contracts", 0)) > 0), None)
-            if open_position:
-                qty = float(open_position["contracts"])
-                print(f"Closing position with {qty} contracts of {symbol}")
-                order = exchange.create_market_sell_order(symbol, qty, {"reduceOnly": True})
+            positions = delta.get_positions()
+            position = next((p for p in positions["result"] if p["product_id"] == product_id), None)
+
+            if position and float(position["size"]) > 0:
+                print(f"Closing position for {symbol} with size {position['size']}")
+                order = delta.create_order(
+                    product_id=product_id,
+                    size=position["size"],
+                    side="sell",
+                    order_type="market",
+                    reduce_only=True
+                )
                 return jsonify({"status": "success", "order": order}), 200
             else:
-                return jsonify({"status": "info", "message": "No open position"}), 200
+                return jsonify({"status": "info", "message": f"No open position for {symbol}"}), 200
 
-        else:
-            return jsonify({"status": "error", "message": "Unknown action/side"}), 400
+        return jsonify({"error": "Invalid command"}), 400
 
-    except ccxt.BaseError as e:
-        print("CCXT Error:", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
     except Exception as e:
-        print("Unhandled Exception:", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        print("Error:", e)
+        return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
