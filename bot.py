@@ -10,6 +10,11 @@ API_KEY = os.getenv("API_KEY")
 API_SECRET = os.getenv("API_SECRET")
 SECRET_KEY = os.getenv("SECRET_KEY", "default-secret-if-not-set")
 
+print("🔍 DEBUG - API_KEY:", repr(API_KEY))
+print("🔍 DEBUG - API_SECRET:", repr(API_SECRET))
+print("🔍 DEBUG - SECRET_KEY:", repr(SECRET_KEY))
+
+
 # --- Safety check ---
 if not API_KEY or not API_SECRET:
     print("❌ API_KEY or API_SECRET is missing. Set them in environment variables.")
