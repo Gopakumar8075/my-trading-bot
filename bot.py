@@ -8,7 +8,6 @@ app = Flask(__name__)
 API_KEY = os.getenv("API_KEY")
 API_SECRET = os.getenv("API_SECRET")
 SECRET_KEY = os.getenv("SECRET_KEY", "test1234")  # Should match TradingView Pine alert
-
 # Check API key presence
 if not API_KEY or not API_SECRET:
     raise Exception("Missing API_KEY or API_SECRET in environment variables")
