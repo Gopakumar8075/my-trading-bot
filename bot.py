@@ -27,6 +27,18 @@ except Exception as e:
     raise Exception(f"Error initializing exchange: {e}")
 
 
+ # --- THIS IS THE FIX ---
+    # Tell CCXT to use the demo/sandbox environment
+    exchange.set_sandbox_mode(True) 
+    # -----------------------
+
+    print("Connected to Delta Exchange in SANDBOX/DEMO mode") # Updated print statement for clarity
+except Exception as e:
+    raise Exception(f"Error initializing exchange: {e}")
+
+# ... the rest of your Flask app code remains the same ...
+
+
 @app.route('/')
 def home():
     return "Webhook Bot is live!"
